@@ -16,6 +16,24 @@
 	//		Init
 	//////////////////////////////////////////////////////////////////////////////////
 
+	class Vertex {
+		constructor(p) {
+			this.p = p;
+			this.normal = [];
+			this.triangles = [];
+		}
+	}
+
+	class Triangle {
+		constructor(v0, v1, v2) {
+			this.v0 = v0;
+			this.v1 = v1;
+			this.v2 = v2;
+			this.normal = [];
+			this.tangent = [];
+		}
+	}
+
 	// init renderer
 	var renderer	= new THREE.WebGLRenderer({
 		// antialias	: true,
@@ -35,6 +53,14 @@
 	// init scene and camera
 	var scene	= new THREE.Scene();
 
+
+	// Add lighting so the green color is visible
+	var light = new THREE.DirectionalLight(0xffffff, 1);
+	light.position.set(1, 1, 1).normalize();
+	scene.add(light);
+
+	var ambientLight = new THREE.AmbientLight(0x404040); // soft white ambient light
+	scene.add(ambientLight);
 	//////////////////////////////////////////////////////////////////////////////////
 	//		Initialize a basic camera
 	//////////////////////////////////////////////////////////////////////////////////
@@ -131,25 +157,17 @@
 
 	var arWorldRoot = smoothedRoot
 
-	// add a torus knot
-	var geometry	= new THREE.BoxGeometry(1,1,1);
-	var material	= new THREE.MeshNormalMaterial({
-		transparent : true,
-		opacity: 0.5,
-		side: THREE.DoubleSide
-	});
-	var mesh	= new THREE.Mesh( geometry, material );
-	mesh.position.y	= geometry.parameters.height/2
-	arWorldRoot.add( mesh );
+	// add a custom surface
 
-	var geometry	= new THREE.TorusKnotGeometry(0.3,0.1,64,16);
-	var material	= new THREE.MeshNormalMaterial();
+	var geometry	= this.generateBufferGeometry();
+	var material	= new THREE.MeshStandardMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
 	var mesh	= new THREE.Mesh( geometry, material );
-	mesh.position.y	= 0.5
+	mesh.position.y	= 0.5;
+	mesh.rotation.x = 1.25;
 	arWorldRoot.add( mesh );
 
 	onRenderFcts.push(function(){
-		mesh.rotation.x += 0.1
+		mesh.rotation.x += 0.01;
 	})
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -177,4 +195,80 @@
 			onRenderFct(deltaMsec/1000, nowMsec/1000)
 		})
 	})
+
+	function generateBufferGeometry() {
+		const geometry = new THREE.BufferGeometry();
+		const data = {};
+		
+		this.createSurfaceData(data);
+
+		// Define the vertex positions
+		const vertices = data.verticesF32;
+
+		// Set the position attribute
+		geometry.addAttribute('position', new THREE.BufferAttribute(vertices, 3));
+
+		// Define the indices for faces (if not sequential)
+		const indices = data.indicesU16;
+		geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+		return geometry;
+	}
+
+	function createSurfaceData(data) {
+        let vertices = [];
+        let triangles = [];
+
+        let a = 1.0;
+        let c = 0.5;
+        let theta = Math.PI / 6;
+
+        let numU = 72;
+        let numT = 10;
+        let tMin = -1, tMax = 1;
+
+        for (let i = 0; i < numT; i++) {
+            let t = tMin + (tMax - tMin) * (i / (numT - 1));
+            for (let j = 0; j < numU; j++) {
+                let u = (j / numU) * 2 * Math.PI;
+                let r = a + t * Math.cos(theta) + c * t * t * Math.sin(theta);
+                let x = r * Math.cos(u);
+                let y = r * Math.sin(u);
+                let z = -t * Math.sin(theta) + c * t * t * Math.cos(theta);
+                vertices.push(new Vertex([x, y, z]));
+            }
+        }
+
+        for (let i = 0; i < numT - 1; i++) {
+            for (let j = 0; j < numU; j++) {
+                let v0 = i * numU + j;
+                let v1 = i * numU + (j + 1) % numU;
+                let v2 = (i + 1) * numU + j;
+                let v3 = (i + 1) * numU + (j + 1) % numU;
+
+                triangles.push(new Triangle(v0, v1, v2));
+                triangles.push(new Triangle(v1, v3, v2));
+            }
+        }
+
+        this.generateVerticesAndIndicesArrays(vertices, triangles, data);
+    }
+
+	function generateVerticesAndIndicesArrays(vertices, triangles, data) {
+        data.verticesF32 = new Float32Array(vertices.length * 3);
+        for (let i = 0; i < vertices.length; i++) {
+            data.verticesF32[i * 3 + 0] = vertices[i].p[0];
+            data.verticesF32[i * 3 + 1] = vertices[i].p[1];
+            data.verticesF32[i * 3 + 2] = vertices[i].p[2];
+        }
+
+        data.indicesU16 = new Uint16Array(triangles.length * 3);
+        for (let i = 0; i < triangles.length; i++) {
+            data.indicesU16[i * 3 + 0] = triangles[i].v0;
+            data.indicesU16[i * 3 + 1] = triangles[i].v1;
+            data.indicesU16[i * 3 + 2] = triangles[i].v2;
+        }
+
+        return data;
+    }
 </script></body>
